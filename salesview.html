@@ -1,0 +1,412 @@
+<!-- python -m SimpleHTTPServer 8080 //-->
+
+<!DOCTYPE html>
+<head>
+<meta charset="utf-8">
+<title>View of the Enterprise</title>
+
+<!-- JavaScript Libraries //-->
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="tooltip.js"></script>
+<script src="http://code.jquery.com/jquery-1.8.2.min.js"></script>
+<script src="http://d3js.org/topojson.v0.min.js"></script>
+
+<!-- CSS Style //-->
+<link href="http://fonts.googleapis.com/css?family=Source+Sans+Pro:300,900|Source+Code+Pro:300" rel="stylesheet" type="text/css">
+<link href="style.css" rel="stylesheet" type="text/css">
+
+<script>
+var dimensions = {
+    width:  700,
+    height: 400,
+    margin: 40,
+    bottom : 300,
+    left: 200
+};
+
+// helper function to create an SVG element with the specified id.
+//create_svg example code provided by Sophie Engle
+function create_svg(id) {
+    // create svg image
+    var svg = d3.select("#" + id)
+        .append("svg")
+        .attr("width", dimensions.width)
+        .attr("height", dimensions.height)
+
+    // draw a rectangle with a light grey background
+    svg.append("rect")
+        .attr("width", dimensions.width)
+        .attr("height", dimensions.height)
+        .style("fill", "#eeeeee");
+
+    // return reference to svg image
+    return svg;
+}
+
+/* Create the scatter-plot matrix */
+function create_scatter(svg, sales){
+
+    var margin = {top: 20, right: 15, bottom: 150, left: 60}
+  , width = 960 - margin.left - margin.right
+  , height = 500 - margin.top - margin.bottom;
+
+
+  
+    svg = svg.append("g")
+        .attr("transform", "translate(" +  margin.left + ',' + margin.top + ')');
+
+    var x = d3.scale.linear().range([ 0, width]);
+
+    var y = d3.scale.linear().range([ height, 0 ]);
+
+    var color = d3.scale.category10();
+
+    var brush = d3.svg.brush()
+      .x(x)
+      .y(y);
+
+
+    var xAxis = d3.svg.axis().scale(x)
+        .ticks(6)
+        .tickFormat(function(d){
+            return d3.time.format('%I:%M:%S %p')(new Date(d));})
+        .orient("bottom");
+
+    var yAxis = d3.svg.axis().scale(y).orient("left");
+    var div = d3.select("body").append("div")   
+        .attr("class", "tooltip")               
+        .style("opacity", 5);
+
+    x.domain(d3.extent(sales, function(d) { 
+            date = new Date(parseInt(d.ts));
+            return date.getTime(); 
+        })).nice();
+
+    y.domain(d3.extent(sales, function(d) { return d.count; })).nice();
+
+    svg.append("g")  
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis)
+    .append("text")
+      .attr("class", "label")
+      .attr("x", width)
+      .attr("y", -6)
+      .style("text-anchor", "end")
+      .text("Time");
+    
+    svg.append("g")
+      .attr("class", "y axis")
+      .call(yAxis)
+    .append("text")
+      .attr("class", "label")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 6)
+      .attr("dy", ".71em")
+      .style("text-anchor", "end")
+      .text("Count");
+    
+    //append dots
+    svg.selectAll(".dot")
+      .data(sales)
+      .enter().append("circle")
+      .attr("class", "dot")
+      .attr("r", function(d) { return (5); })
+      .attr("cx", function(d) { 
+        var date = new Date(parseInt(d.ts));
+        return x(date.getTime()); 
+    })
+      .attr("cy", function(d) { return y(d.count); })
+      .style("fill", function(d) { return color("#FF0000"); })
+      .style("fill", function(d) { return (d.category == "COLD" ? "#7FFF00" : d.category == "HOT" ? "#FF0000" : "#ED702D")})
+      .on("mouseover", function(d) {  
+        d3.select(this)
+        .style("fill", "aliceblue");
+        div.transition()        
+            .duration(200)      
+            .style("opacity", .9)   
+        div .html(d.companyName + "<br/>" +d.city + " " + d.state)  
+            .style("left", (d3.event.pageX) + "px")     
+            .style("top", (d3.event.pageY - 28) + "px");
+
+        //select all dots, filter dot matching current
+         d3.selectAll(".dot")
+        .filter(function(x, i){
+            if (x.id == d.id){
+                return true;
+            }
+        })
+        .style("fill", "aliceblue");             
+        
+        })          
+        .on("mouseout", function(d) {   
+            d3.select(this)
+            .style("fill", function(d) { return (d.category == "COLD" ? "#7FFF00" : d.category == "HOT" ? "#FF0000" : "#ED702D" )});
+            div.transition()        
+            .duration(500)      
+            .style("opacity", 0);  
+             d3.selectAll(".dot")
+            .filter(function(x, i){
+                if (x.id == d.id){
+                    return true;
+                }
+            })
+            .style("fill", function(d) { return (d.category == "COLD" ? "#7FFF00" : d.category == "HOT" ? "#FF0000" : "#ED702D" )});   
+    });
+}
+
+function do_brush(scatter, map, sales){
+  //Using same margin and scales of the scatter plot
+
+    var margin = {top: 20, right: 15, bottom: 150, left: 60}
+    , width = 960 - margin.left - margin.right
+    , height = 500 - margin.top - margin.bottom;
+
+        var xScale = d3.scale.linear().range([ 0, width]);
+        var yScale = d3.scale.linear().range([ height, 0 ]);
+        xScale.domain(d3.extent(sales, function(d) { 
+                date = new Date(parseInt(d.ts));
+                return date.getTime(); 
+            })).nice();
+
+        yScale.domain(d3.extent(sales, function(d) { return d.count; })).nice();
+
+    var brush = d3.svg.brush()
+        .on("brushstart", brushstart)
+        .on("brush", brush)
+        .on("brushend", brushend);
+
+    scatter.append("g")
+        .attr("class", "brush") 
+        .attr("transform", "translate(" +  margin.left + ',' + margin.top + ')')
+        .call(brush.x(xScale).y(yScale));
+
+    clearSelection = function() {
+        scatter.call(brush.clear());
+        map.call(brush.clear());
+    };
+    
+    brushingClick = function() {
+        var on = document.getElementById('brushing').checked;
+        d3.selectAll('.brush').classed('hidden', !on);
+        clearSelection();  
+    };
+
+    clearSelection = function() {
+        scatter.call(brush.clear());
+    };
+
+    function brushstart(p) {
+        scatter.classed("selecting", true);
+        map.classed("selecting", true);
+
+        if (brush.data !== p) {d
+            scatter.call(brush.clear());
+            brush.x(xScale).y(yScale).data = p;
+        }
+    }
+
+    function brushend(p) {
+        scatter.classed("selecting", false);
+        map.classed("selecting", false);
+        scatter.call(brush.clear());
+        //map.call(brush.clear());
+    }
+
+    function brush(p) {
+        var e = brush.extent();
+
+        var selected = {};
+        scatter.selectAll(".dot").classed("selected", function(d) {
+            var date = new Date(parseInt(d.ts));
+            var tx = (date.getTime()); 
+            var ty = d.count;
+            ty = d.count;
+
+            var sel =  e[0][0] <= tx && tx <= e[1][0] 
+            && e[0][1] <= ty && ty <= e[1][1];
+
+            selected[d['id']] = sel;
+            return sel;
+        });
+        map.selectAll(".dot").classed("selected", function(d) {
+            console.log("MAP! SELECTED:" + selected[d['id']]);
+            return selected[d['id']];
+        }); 
+    }
+}
+
+
+/* Create geospatial visualization */
+function create_map(svg, sales){
+
+    var width = 960,
+        height = 500,
+        centered;
+
+    var margin = {top: 20, right: 15, bottom: 150, left: 60}
+  , width = 960 - margin.left - margin.right
+  , height = 500 - margin.top - margin.bottom;
+
+    var projection = d3.geo.albersUsa()
+        .scale(750)
+        .translate([350, 200]);
+
+    var path = d3.geo.path()
+        .projection(projection);
+
+
+    d3.json("us.json", function(error, us) {
+        svg.insert("path", ".graticule")
+          .datum(topojson.object(us, us.objects.land))
+          .attr("class", "land")
+          .attr("d", path);
+
+
+        svg.insert("path", ".graticule")
+          .datum(topojson.mesh(us, us.objects.counties, function(a, b) { return a !== b && !(a.id / 1000 ^ b.id / 1000); }))
+          .attr("class", "county-boundary")
+          .attr("d", path);
+
+        svg.insert("path", ".graticule")
+          .datum(topojson.mesh(us, us.objects.states, function(a, b) { return a !== b; }))
+          .attr("class", "state-boundary")
+          .attr("d", path);
+        var div = d3.select("body").append("div")   
+          .attr("class", "tooltip")               
+          .style("opacity", 5);
+
+        //append dots
+        svg.selectAll(".dot")
+          .data(sales)
+          .enter().append("circle")
+          .attr("class", "dot")
+          .attr("r", function(d) { return (5); })
+          .attr("cx", function(d){
+              var lat = d.lat;
+              var lon = d.longitude;
+              return projection([lon, lat])[0];
+          })
+          .attr("cy", function(d){
+              var lat = d.lat;
+              var lon = d.longitude;
+              return projection([lon, lat])[1];
+          })
+          .style("fill", function(d) { 
+            return (d.category == "COLD" ? "#7FFF00" : d.category == "HOT" ? "#FF0000" : "#ED702D")})
+            .on("mouseover", function(d) {  
+
+              //on mouseover, show tool tip with company name and location
+              d3.select(this)
+              .style("fill", "aliceblue");
+              div.transition()        
+                  .duration(200)      
+                  .style("opacity", .9)   
+              div .html(d.companyName + "<br/>" +d.city + " " + d.state)  
+                  .style("left", (d3.event.pageX) + "px")     
+                  .style("top", (d3.event.pageY - 28) + "px"); 
+              })          
+              .on("mouseout", function(d) {   
+                  d3.select(this)
+                  .style("fill", function(d) {
+                    return (d.category == "COLD" ? "#7FFF00" : d.category == "HOT" ? "#FF0000" : "#ED702D" )});
+                  div.transition()        
+                  .duration(500)      
+                  .style("opacity", 0); 
+          });
+    });
+}
+
+/* One implementation of pre-processing sales data*/
+/* Randomly removes some "warm" and "cold" data to remove clutter */
+function process_data(data){
+    /* Pre-process sales data */
+    var sales = []; 
+
+    var counter = 0;
+    for (var key in data) {
+        var sale = jQuery.parseJSON(key);
+        var saleData = data[key];
+            
+        var city;
+        var state;
+        if(saleData['context-City'] === null || 
+            saleData['context-City'] === undefined) {
+            city = 'unknown';
+            state = ""
+        } else {
+            // remove carets (^) from names
+            city = saleData['context-City'].replace(/\^/g," ") + ",";
+            state = saleData['context-StateAbbr'];
+        };
+
+        var newsale = { 
+            // add whatever fields you want from the JSON in here
+            count: saleData['context-Count'],
+            id: sale.id, 
+            key: sale.key, 
+            category: saleData['context-Category'],
+            companyName: saleData['context-CompanyName'],
+            city: city, 
+            state: state,
+            lat: saleData['context-Lat'],
+            longitude: saleData['context-Long'],
+            ts: saleData['context-TS']
+        };
+        /* Randomly filter out some "cold" and "warm" sales data to reduce clutter in visualization */
+        if(newsale.count < 2000){
+            if(newsale.count < 1000){       
+                counter = counter + 1;
+                if(counter % 10 == 0){
+                    sales.push(newsale);              
+                }
+            } else{
+                sales.push(newsale);
+            }
+        } else{
+            sales.push(newsale);
+        }
+    };
+    sales.shift();
+    return sales;
+}
+
+function create_visualizations(data){
+    var sales = process_data(data);
+    scatter = create_svg("scatter");
+    map = create_svg("map");
+
+    //visualizations are decoupled
+    create_scatter(scatter, sales);
+    create_map(map, sales);
+    do_brush(scatter, map, sales);
+}
+
+</script>
+</head>
+
+<body>
+
+<h2>A View of the Enterprise</h2>
+<div class="container">
+  <div id="scatter"></div>
+
+  <div id="map"></div>
+</div>
+
+<div class="clear"></div>
+<h3> Report </h3>
+<h4> What I Learned </h4>
+<p>The goal of this visualization is to reveal anomalies within the enterprise in a time series and locational context while encoding data as efficiently as possible. At a higher level, I attempted to implement a single view of the enterprise. This visualization reveals when and where the most significant anomalies occur by pairing a time series scatter-plot matrix and bubble plot on a map. From a visualization standpoint, the goal is to use context and focus to allow users get a better understanding of a certain data point while maintaining context with the rest of the visualization.</p>
+<h4> User Guide </h4>
+<p> Each datapoint represents an anomaly or a point of interest within the system. The color indicates how significant this data point really is. For instance, say you are selling iPads in multiple stores across the Bay Area. If one store is selling at a rate that significantly deviates from its mean, that is an anomaly that should be addressed by adjusting inventory in some manner. This visualization will allow you to spot critical data points at first glance by looking at the color of the datapoint and its position on the y-axis of the scatter-plot. With this visualization, you must scroll over the data points on either the map or the scatter-plot matrix. When you scroll over a datapoint, a tooltip will pop up that indicates the business name and location. If you scroll over a datapoint on the scatter-plot, its corresponding datapoint will also turn white on the map visualization. </p>
+<h4> Technique </h4>
+<p> This visualization was implemented as a scatter-plot matrix paired with a geo-spatial visualization. Each dot on the scatter-plot matrix  has a corresponding dot on the map. The “count” from each data point and the time is encoded in the x and y axises on the scatter-plot matrix. When scrolling over a datapoint on the scatter-plot, a tooltip pops up indicating the company name and its location. Also, the datapoint will turn white on both the scatter-plot and the map. Location is encoded in both the tool tip and the geospatial visualization. The significance of the data point is encoded as the color of the dot where blue, orange, red indicate whether a datapoint is normal, slightly deviated, or significantly deviated from the mean. The higher level motivation of this visualization is to provide context and focus because you can focus on the data in a time series and locational view without losing the wider context.</p>
+
+<script>
+// load data and create visualizations
+d3.json("sample_data.json", create_visualizations);
+</script>
+
+</body>
+</html>
